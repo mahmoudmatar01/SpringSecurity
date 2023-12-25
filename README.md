@@ -39,11 +39,26 @@ Spring Security supports declarative security, allowing you to define the applic
 This approach provides a clear separation of concerns between application code and security, making it easier to manage and maintain.
 
 ## Getting Started
+In the world of web development, security is of utmost importance. Building a robust authentication and authorization system is essential to protect sensitive user data and resources. This tutorial will guide you through the process of creating a secure web application using the Spring Framework, specifically leveraging Spring Boot, Spring Security, and the Java Persistence API (JPA).
 
-To integrate Spring Security into your Spring Boot application:
+### Setting up the Project
 
-1. Add the Spring Security starter to your project.
+The first step in building our secure Spring application is to set up the project. We’ll use Spring Initializr, a web-based tool for generating Spring Boot projects with all the required dependencies. Follow these steps:
 
+1. **Access Spring Initializr:**
+   Open your web browser and navigate to [Spring Initializr](https://start.spring.io/).
+
+2. **Project Configuration:**
+   - Choose the latest stable version of Spring Boot.
+   - Set the project type to “Maven” or “Gradle,” depending on your preference.
+   - Define the project’s metadata, such as the group, artifact, and name.
+
+3. **Dependencies:**
+   In the “Dependencies” section, search for and add the following dependencies:
+   - “Spring Web” for building web applications.
+   - “Spring Security” for securing our application.
+   - “Spring Data JPA” for data access and persistence.
+     
  ```xml
  <dependency>
      <groupId>org.springframework.boot</groupId>
@@ -51,8 +66,209 @@ To integrate Spring Security into your Spring Boot application:
  </dependency>
 ```
 
-1. Customize security settings based on your application requirements.
+4. **Generate the Project:**
+   Click the “Generate” button to create your project archive (ZIP file).
 
-2. Test and iterate, ensuring that authentication and authorization are working as expected.
+
+ <img src="https://miro.medium.com/v2/resize:fit:828/format:webp/1*kODiNBLonXUX__jgiZS5yw.png" alt="Generate Project">
+ Spring intializr
+
+Now that we have our project set up, unzip the archive and open it in your chosen development environment. We’re ready to start building our secure Spring application.
+
+In the next section, we’ll dive into creating the database model for our application, defining the entities, and using JPA for data persistence.
+
+### Creating the Database Model
+With our Spring project set up, it’s time to define the data model for our application. In this section, we’ll create the necessary entity classes and annotate them with JPA annotations for data persistence.
+
+#### Defining the User Entity
+The first entity we’ll define is the User entity, which will represent user data in our application. Here's an example of how to create a simple User entity:
+
+```java
+@Entity
+@Data
+public class User {
+
+    @Id
+    private Long id;
+    private String username;
+    private String password;
+
+    // Add more fields as needed, e.g., name, email, roles, etc.
+
+}
+```
+
+In this example, we’ve used JPA annotations to mark the class as an entity `(@Entity)`. The `@Id` annotation designates the primary key.
 
 
+### Defining the UserRepository
+Create the UserRepository Interface: Create the UserRepository interface and extend `JpaRepository<User, Long>`. This interface extends Spring Data JPA's `JpaRepository` interface and provides various methods for common database operations.
+
+```java
+import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+```
+
+In this example:
+
+- `@Repository` annotation indicates that this interface is a Spring repository.
+- `JpaRepository<User, Long>` specifies that this repository deals with the `User` entity, and the primary key of the entity is of type `Long`.
+
+### Configuring Spring Security
+Spring Security’s power lies in its flexibility and configurability. In this section, we’ll demonstrate how to configure Spring Security to protect your application and specify access rules.
+
+#### Configuration Class
+In your Spring Boot project, create a configuration class to customize Spring Security settings. You can do this by extending` WebSecurityConfigurerAdapter` and overriding its methods. Here's a basic example:
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .authorizeRequests()
+                .antMatchers("/", "/home").permitAll()
+                .antMatchers("/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
+                .and()
+            .formLogin()
+                .loginPage("/login")
+                .permitAll()
+                .and()
+            .logout()
+                .permitAll();
+    }
+}
+```
+
+In this example:
+
+- `@Configuration` indicates that this class contains Spring configuration.
+- `@EnableWebSecurity` enables Spring Security for the application.
+- The configure`(HttpSecurity http)` method defines access rules and authentication settings. In this case:
+- The root and `/home` paths are accessible to everyone `(permitAll())`.
+- The `/admin/**` path is restricted to users with the` “ADMIN” `role.
+- All other requests require authentication.
+- A custom` login` page is specified, and `logout` is permitted.
+
+### UserDetailsService
+
+To load user details from your database, you can create a custom `UserDetailsService` implementation. Here's a simplified example:
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // Retrieve user from the database
+        UserEntity userEntity = userRepository.findByUsername(username);
+        
+        if (userEntity == null) {
+            throw new UsernameNotFoundException("User not found");
+        }
+
+        // Build a UserDetails object
+        UserDetails userDetails = User.withUsername(userEntity.getUsername())
+            .password(userEntity.getPassword())
+            .roles(userEntity.getRoles())
+            .build();
+
+        return userDetails;
+    }
+}
+```
+
+In this example, we retrieve the user details from the database using a custom `UserRepository` and build a` UserDetails` object.
+
+
+### Password Encoding
+
+Security best practices recommend hashing passwords. You can configure Spring Security to use a specific password encoder. For example, using `BCrypt`:
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+```
+
+### Creating Controllers
+Now that we have our database model defined, it’s time to create controllers to handle incoming HTTP requests and interact with our data. In a Spring application, controllers are responsible for processing requests, invoking the necessary business logic, and returning responses.
+
+#### Spring MVC Controllers
+Spring provides a powerful and flexible web framework called Spring `MVC (Model-View-Controller)` for building web applications. In Spring MVC, controllers are typically annotated with `@Controller` and handle specific request mappings.
+
+Here’s an example of a simple controller for managing user-related operations:
+
+```java
+
+import com.example.inventory.Repositories.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import com.example.inventory.Data.User;
+@Controller
+public class UserController {
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+    @GetMapping("/Home")
+    public String login() {
+        return "home";
+    }
+    @GetMapping("/login")
+    public String login() {
+        return "login";
+    }
+
+    @GetMapping("/signup")
+    public String signup() {
+        return "signup";
+    }
+
+    @PostMapping("/signup")
+    public String createUser(User user) {
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        userRepository.save(user);
+        return "redirect:/login";
+    }
+}
+```
